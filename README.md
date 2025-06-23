@@ -1,5 +1,8 @@
 # dnstt-deploy
 
+**Languages:** [English](README.md) | [فارسی](README-fa.md)
+
+
 🚀 **One-click dnstt server deployment and management**
 
 A comprehensive automation script for deploying and managing [dnstt](https://www.bamsoftware.com/software/dnstt) DNS tunnel servers on Linux systems. This script handles everything from installation to configuration, making DNS tunnel deployment effortless.
