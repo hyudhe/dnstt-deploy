@@ -119,9 +119,10 @@ show_menu() {
     echo "2) Update dnstt-deploy script"
     echo "3) Check service status"
     echo "4) View service logs"
-    echo "5) Exit"
+    echo "5) Show configuration info"
+    echo "0) Exit"
     echo ""
-    print_question "Please select an option (1-5): "
+    print_question "Please select an option (0-5): "
 }
 
 # Function to handle menu selection
@@ -152,11 +153,14 @@ handle_menu() {
                 journalctl -u dnstt-server -f
                 ;;
             5)
+                show_configuration_info
+                ;;
+            0)
                 print_status "Goodbye!"
                 exit 0
                 ;;
             *)
-                print_error "Invalid choice. Please enter 1-5."
+                print_error "Invalid choice. Please enter 0-5."
                 ;;
         esac
 
@@ -168,7 +172,71 @@ handle_menu() {
     done
 }
 
-# Function to check for script updates (notification only)
+# Function to show configuration information
+show_configuration_info() {
+    print_status "Current Configuration Information"
+    print_status "================================"
+
+    # Check if configuration file exists
+    if [ ! -f "$CONFIG_FILE" ]; then
+        print_warning "No configuration found. Please install/configure dnstt server first."
+        return 1
+    fi
+
+    # Load existing configuration
+    if ! load_existing_config; then
+        print_error "Failed to load configuration from $CONFIG_FILE"
+        return 1
+    fi
+
+    # Check if service is running
+    local service_status
+    if systemctl is-active --quiet dnstt-server; then
+        service_status="${GREEN}Running${NC}"
+    else
+        service_status="${RED}Stopped${NC}"
+    fi
+
+    echo ""
+    echo -e "${BLUE}Configuration Details:${NC}"
+    echo -e "  Nameserver subdomain: ${YELLOW}$NS_SUBDOMAIN${NC}"
+    echo -e "  MTU: ${YELLOW}$MTU_VALUE${NC}"
+    echo -e "  Tunnel mode: ${YELLOW}$TUNNEL_MODE${NC}"
+    echo -e "  Service user: ${YELLOW}$DNSTT_USER${NC}"
+    echo -e "  Listen port: ${YELLOW}$DNSTT_PORT${NC} (DNS traffic redirected from port 53)"
+    echo -e "  Service status: $service_status"
+    echo ""
+
+    # Show public key if it exists
+    if [ -f "$PUBLIC_KEY_FILE" ]; then
+        echo -e "${BLUE}Public Key Content:${NC}"
+        echo -e "${YELLOW}$(cat "$PUBLIC_KEY_FILE")${NC}"
+        echo ""
+    else
+        print_warning "Public key file not found: $PUBLIC_KEY_FILE"
+    fi
+
+    echo -e "${BLUE}Management Commands:${NC}"
+    echo -e "  Run menu:           ${YELLOW}dnstt-deploy${NC}"
+    echo -e "  Start service:      ${YELLOW}systemctl start dnstt-server${NC}"
+    echo -e "  Stop service:       ${YELLOW}systemctl stop dnstt-server${NC}"
+    echo -e "  Service status:     ${YELLOW}systemctl status dnstt-server${NC}"
+    echo -e "  View logs:          ${YELLOW}journalctl -u dnstt-server -f${NC}"
+
+    # Show SOCKS info if applicable
+    if [ "$TUNNEL_MODE" = "socks" ]; then
+        echo ""
+        echo -e "${BLUE}SOCKS Proxy Information:${NC}"
+        echo -e "SOCKS proxy is running on ${YELLOW}127.0.0.1:1080${NC}"
+        echo -e "${BLUE}Dante service commands:${NC}"
+        echo -e "  Status:  ${YELLOW}systemctl status danted${NC}"
+        echo -e "  Stop:    ${YELLOW}systemctl stop danted${NC}"
+        echo -e "  Start:   ${YELLOW}systemctl start danted${NC}"
+        echo -e "  Logs:    ${YELLOW}journalctl -u danted -f${NC}"
+    fi
+
+    echo ""
+}
 check_for_updates() {
     # Only check for updates if we're running from the installed location
     if [ "$0" = "$SCRIPT_INSTALL_PATH" ]; then
