@@ -20,12 +20,169 @@ NC='\033[0m' # No Color
 
 # Global variables
 DNSTT_BASE_URL="https://dnstt.network"
+SCRIPT_URL="https://raw.githubusercontent.com/bugfloyd/dnstt-deploy/main/dnstt-deploy.sh"
 INSTALL_DIR="/usr/local/bin"
 CONFIG_DIR="/etc/dnstt"
 SYSTEMD_DIR="/etc/systemd/system"
 DNSTT_PORT="5300"
 DNSTT_USER="dnstt"
 CONFIG_FILE="${CONFIG_DIR}/dnstt-server.conf"
+SCRIPT_INSTALL_PATH="/usr/local/bin/dnstt-deploy"
+
+# Function to install/update the script itself
+install_script() {
+    print_status "Installing/updating dnstt-deploy script..."
+
+    # Download the latest version
+    local temp_script="/tmp/dnstt-deploy-new.sh"
+    curl -Ls "$SCRIPT_URL" -o "$temp_script"
+
+    # Make it executable
+    chmod +x "$temp_script"
+
+    # Check if we're updating an existing installation
+    if [ -f "$SCRIPT_INSTALL_PATH" ]; then
+        # Compare checksums to see if update is needed
+        local current_checksum
+        local new_checksum
+        current_checksum=$(sha256sum "$SCRIPT_INSTALL_PATH" | cut -d' ' -f1)
+        new_checksum=$(sha256sum "$temp_script" | cut -d' ' -f1)
+
+        if [ "$current_checksum" = "$new_checksum" ]; then
+            print_status "Script is already up to date"
+            rm "$temp_script"
+            return 0
+        else
+            print_status "Updating existing script installation..."
+        fi
+    else
+        print_status "Installing script for the first time..."
+    fi
+
+    # Copy to installation directory
+    cp "$temp_script" "$SCRIPT_INSTALL_PATH"
+    rm "$temp_script"
+
+    print_status "Script installed to $SCRIPT_INSTALL_PATH"
+    print_status "You can now run 'dnstt-deploy' from anywhere"
+}
+
+# Function to handle manual update
+update_script() {
+    print_status "Checking for script updates..."
+
+    local temp_script="/tmp/dnstt-deploy-latest.sh"
+    if ! curl -Ls "$SCRIPT_URL" -o "$temp_script"; then
+        print_error "Failed to download latest version"
+        return 1
+    fi
+
+    local current_checksum
+    local latest_checksum
+    current_checksum=$(sha256sum "$SCRIPT_INSTALL_PATH" | cut -d' ' -f1)
+    latest_checksum=$(sha256sum "$temp_script" | cut -d' ' -f1)
+
+    if [ "$current_checksum" = "$latest_checksum" ]; then
+        print_status "You are already running the latest version"
+        rm "$temp_script"
+        return 0
+    fi
+
+    print_status "New version available! Updating..."
+    chmod +x "$temp_script"
+    cp "$temp_script" "$SCRIPT_INSTALL_PATH"
+    rm "$temp_script"
+    print_status "Script updated successfully!"
+    print_status "Changes will take effect on next run"
+}
+
+# Function to show main menu
+show_menu() {
+    echo ""
+    print_status "dnstt Server Management"
+    print_status "======================="
+    echo "1) Install/Reconfigure dnstt server"
+    echo "2) Update dnstt-deploy script"
+    echo "3) Check service status"
+    echo "4) View service logs"
+    echo "5) Exit"
+    echo ""
+    print_question "Please select an option (1-5): "
+}
+
+# Function to handle menu selection
+handle_menu() {
+    while true; do
+        show_menu
+        read -r choice
+
+        case $choice in
+            1)
+                print_status "Starting dnstt server installation/reconfiguration..."
+                return 0  # Continue with main installation
+                ;;
+            2)
+                update_script
+                ;;
+            3)
+                if systemctl is-active --quiet dnstt-server; then
+                    print_status "dnstt-server service is running"
+                    systemctl status dnstt-server --no-pager -l
+                else
+                    print_warning "dnstt-server service is not running"
+                    systemctl status dnstt-server --no-pager -l
+                fi
+                ;;
+            4)
+                print_status "Showing dnstt-server logs (Press Ctrl+C to exit)..."
+                journalctl -u dnstt-server -f
+                ;;
+            5)
+                print_status "Goodbye!"
+                exit 0
+                ;;
+            *)
+                print_error "Invalid choice. Please enter 1-5."
+                ;;
+        esac
+
+        if [ "$choice" != "4" ]; then
+            echo ""
+            print_question "Press Enter to continue..."
+            read -r
+        fi
+    done
+}
+
+# Function to check for script updates
+check_for_updates() {
+    # Only check for updates if we're running from the installed location
+    if [ "$0" = "$SCRIPT_INSTALL_PATH" ]; then
+        print_status "Checking for script updates..."
+
+        local temp_script="/tmp/dnstt-deploy-latest.sh"
+        if curl -Ls "$SCRIPT_URL" -o "$temp_script"; then
+            local current_checksum
+            local latest_checksum
+            current_checksum=$(sha256sum "$SCRIPT_INSTALL_PATH" | cut -d' ' -f1)
+            latest_checksum=$(sha256sum "$temp_script" | cut -d' ' -f1)
+
+            if [ "$current_checksum" != "$latest_checksum" ]; then
+                print_status "New version available! Updating..."
+                chmod +x "$temp_script"
+                cp "$temp_script" "$SCRIPT_INSTALL_PATH"
+                rm "$temp_script"
+                print_status "Script updated successfully. Restarting with new version..."
+                exec "$SCRIPT_INSTALL_PATH" "$@"
+            else
+                print_status "Script is up to date"
+                rm "$temp_script"
+            fi
+        else
+            print_warning "Could not check for updates (network issue)"
+        fi
+    fi
+}
 
 # Function to load existing configuration
 load_existing_config() {
@@ -58,6 +215,7 @@ EOF
     chown root:"$DNSTT_USER" "$CONFIG_FILE"
     print_status "Configuration saved to $CONFIG_FILE"
 }
+
 print_status() {
     echo -e "${GREEN}[INFO]${NC} $1"
 }
@@ -650,11 +808,14 @@ display_final_info() {
     print_status "Public key content:"
     cat "$PUBLIC_KEY_FILE"
     print_status ""
-    print_status "Service management commands:"
-    print_status "  Start:   systemctl start dnstt-server"
-    print_status "  Stop:    systemctl stop dnstt-server"
-    print_status "  Status:  systemctl status dnstt-server"
-    print_status "  Logs:    journalctl -u dnstt-server -f"
+    print_status "Script installed at: $SCRIPT_INSTALL_PATH"
+    print_status ""
+    print_status "Management commands:"
+    print_status "  Run menu:           dnstt-deploy"
+    print_status "  Start service:      systemctl start dnstt-server"
+    print_status "  Stop service:       systemctl stop dnstt-server"
+    print_status "  Service status:     systemctl status dnstt-server"
+    print_status "  View logs:          journalctl -u dnstt-server -f"
 
     if [ "$TUNNEL_MODE" = "socks" ]; then
         print_status ""
@@ -669,6 +830,18 @@ display_final_info() {
 
 # Main function
 main() {
+    # Check for updates if running from installed location (auto-update for curl installs)
+    check_for_updates "$@"
+
+    # Install/update the script itself if not running from installed location
+    if [ "$0" != "$SCRIPT_INSTALL_PATH" ]; then
+        print_status "Starting dnstt server setup..."
+        install_script
+    else
+        # Running from installed location - show menu
+        handle_menu
+    fi
+
     print_status "Starting dnstt server setup..."
 
     # Check and install required tools

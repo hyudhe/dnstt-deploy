@@ -32,6 +32,8 @@ Go into your name registrar's configuration panel and add these records:
 ## Features
 
 - **Multi-distribution support**: Fedora, Rocky Linux, CentOS, Debian, Ubuntu
+- **Interactive management menu**: Easy-to-use interface for all operations
+- **Self-updating capability**: Built-in update mechanism for the script
 - **Automatic detection**: OS, architecture, and SSH port detection
 - **Security hardened**: Non-root service execution with systemd security features
 - **Smart configuration**: Persistent settings and automatic key reuse
@@ -50,20 +52,38 @@ Go into your name registrar's configuration panel and add these records:
 
 ### Installation
 
-1. **Download the script:**
-   ```bash
-   wget https://raw.githubusercontent.com/bugfloyd/dnstt-deploy/main/dnstt-deploy.sh
-   ```
+**One-command installation:**
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/bugfloyd/dnstt-deploy/main/dnstt-deploy.sh)
+```
 
-2. **Run the deployment:**
-   ```bash
-   sudo ./dnstt-deploy.sh
-   ```
+This command will:
+1. Download and install the script to `/usr/local/bin/dnstt-deploy`
+2. Start the interactive setup process
+3. Configure your dnstt server automatically
 
-3. **Follow the interactive prompts:**
-    - Enter your nameserver subdomain (e.g., `t.example.com`)
-    - Set MTU value (default: 1232)
-    - Choose tunnel mode (SSH or SOCKS)
+### Post-Installation Usage
+
+After installation, you can manage your dnstt server using the installed command:
+
+```bash
+dnstt-deploy
+```
+
+This will show an interactive menu with these options:
+
+1. **Install/Reconfigure dnstt server** - Set up or modify configuration
+2. **Update dnstt-deploy script** - Check for and install script updates
+3. **Check service status** - View current service status
+4. **View service logs** - Monitor real-time logs (Ctrl+C to exit)
+5. **Exit** - Quit the menu
+
+### Setup Process
+
+During the setup (option 1), you'll be prompted for:
+- **Nameserver subdomain** (e.g., `t.example.com`)
+- **MTU value** (default: 1232)
+- **Tunnel mode** (SSH or SOCKS)
 
 ## Configuration
 
@@ -90,7 +110,12 @@ Go into your name registrar's configuration panel and add these records:
     - Restricted mobile networks: 512
 
 ### Changing Settings
-To change MTU or other settings, simply re-run the script and enter new values. The script will automatically update the configuration and restart services.
+To change MTU or other settings:
+1. Run `dnstt-deploy`
+2. Choose option 1 (Install/Reconfigure dnstt server)
+3. Enter new values when prompted
+
+The script will automatically update the configuration and restart services.
 
 ## Client Usage
 
@@ -151,18 +176,35 @@ For SSH tunnels, you can use these Android/iOS apps without needing a computer:
 
 ## Management
 
+### Management Menu
+
+The easiest way to manage your dnstt server is through the interactive menu:
+
+```bash
+dnstt-deploy
+```
+
+This provides quick access to:
+- Server reconfiguration
+- Script updates
+- Service status monitoring
+- Real-time log viewing
+
 ### File Locations
 
 ```
-/usr/local/bin/dnstt-server          # Main binary
-/etc/dnstt/                          # Configuration directory
-├── dnstt-server.conf               # Main configuration
-├── {domain}_server.key             # Private key (per domain)
-└── {domain}_server.pub             # Public key (per domain)
+/usr/local/bin/dnstt-deploy             # Management script
+/usr/local/bin/dnstt-server             # Main binary
+/etc/dnstt/                             # Configuration directory
+├── dnstt-server.conf                  # Main configuration
+├── {domain}_server.key                # Private key (per domain)
+└── {domain}_server.pub                # Public key (per domain)
 /etc/systemd/system/dnstt-server.service  # Systemd service
 ```
 
-### Service Commands
+### Manual Service Commands
+
+If you prefer command-line management:
 
 **dnstt-server Service**:
 ```bash
@@ -182,7 +224,30 @@ sudo systemctl restart danted         # Restart service
 sudo journalctl -u danted -f          # View logs
 ```
 
+### Updating the Script
+
+The script can update itself in two ways:
+
+**Method 1: Using the menu (recommended)**
+```bash
+dnstt-deploy
+# Choose option 2: Update dnstt-deploy script
+```
+
+**Method 2: Re-run the curl command**
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/bugfloyd/dnstt-deploy/main/dnstt-deploy.sh)
+# The script will detect and install updates automatically
+```
+
 ## Troubleshooting
+
+### Using the Built-in Tools
+
+The management menu provides quick access to troubleshooting tools:
+
+1. **Check service status** (menu option 3): Shows if services are running properly
+2. **View service logs** (menu option 4): Real-time monitoring of service logs
 
 ### MTU Size Errors
 
@@ -191,12 +256,19 @@ If you see errors like this:
 FORMERR: requester payload size 512 is too small (minimum 1232)
 ```
 
-Lower the MTU to the mentioned number by re-running the script and entering the suggested MTU value. Consider the performance trade-offs when using very low MTU values.
+Lower the MTU to the mentioned number:
+1. Run `dnstt-deploy`
+2. Choose option 1 (Install/Reconfigure dnstt server)
+3. Enter the suggested MTU value when prompted
+
+Consider the performance trade-offs when using very low MTU values.
 
 ### Common Issues
 
 **Service Won't Start**:
 ```bash
+dnstt-deploy  # Use menu option 3 to check status
+# Or manually:
 sudo systemctl status dnstt-server    # Check service status
 sudo journalctl -u dnstt-server -n 50 # Check logs for errors
 ls -la /usr/local/bin/dnstt-server    # Verify binary permissions
@@ -224,13 +296,19 @@ sudo ss -tulnp | grep 1080  # Check SOCKS proxy port (if enabled)
 
 ### Multiple Domain Support
 
-The script supports multiple domains by generating separate key pairs for each domain. However, only one domain configuration can be active at a time since all configurations use port 53 for DNS traffic. To switch between domains, simply re-run the script with a different subdomain.
+The script supports multiple domains by generating separate key pairs for each domain. However, only one domain configuration can be active at a time since all configurations use port 53 for DNS traffic. To switch between domains:
+
+1. Run `dnstt-deploy`
+2. Choose option 1 (Install/Reconfigure dnstt server)
+3. Enter the new subdomain when prompted
 
 ### DoH and DoT Support
 
 For DNS-over-HTTPS (DoH) or DNS-over-TLS (DoT) configurations, refer to the [official dnstt documentation](https://dnstt.network) for detailed setup instructions.
 
 ### Performance Monitoring
+
+Use the built-in log viewer (menu option 4) or manual commands:
 
 ```bash
 sudo ss -tulnp | grep -E "(5300|1080)"        # Monitor connection count
