@@ -35,6 +35,7 @@ Go into your name registrar's configuration panel and add these records:
 - **Interactive management menu**: Easy-to-use interface for all operations
 - **Self-updating capability**: Built-in update mechanism for the script
 - **Automatic detection**: OS, architecture, and SSH port detection
+- **Systemd service integration**: Creates and manages a dedicated systemd service for reliable operation, automatic startup on boot, and comprehensive logging
 - **Security hardened**: Non-root service execution with systemd security features
 - **Smart configuration**: Persistent settings and automatic key reuse
 - **Flexible tunneling**: SSH mode or SOCKS proxy mode
@@ -89,16 +90,16 @@ During the setup (option 1), you'll be prompted for:
 
 ### Tunnel Modes
 
+**SOCKS Mode (Option 1)**
+- Sets up integrated Dante SOCKS5 proxy
+- Listens on `127.0.0.1:1080`
+- Provides full internet proxy capabilities
+
 **SSH Mode (Option 2)**
 - Tunnels DNS traffic to your SSH service
 - Automatically detects SSH port (default: 22)
 - Perfect for secure shell access via DNS
 - Compatible with mobile apps
-
-**SOCKS Mode (Option 1)**
-- Sets up integrated Dante SOCKS5 proxy
-- Listens on `127.0.0.1:1080`
-- Provides full internet proxy capabilities
 
 ### MTU Settings
 - **Default**: 1232 bytes

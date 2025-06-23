@@ -951,19 +951,18 @@ display_final_info() {
 
 # Main function
 main() {
-    # Check for updates if running from installed location (notification only)
-    check_for_updates "$@"
-
-    # Install/update the script itself if not running from installed location
+    # If not running from installed location (curl/GitHub), install the script first
     if [ "$0" != "$SCRIPT_INSTALL_PATH" ]; then
-        print_status "Starting dnstt server setup..."
+        print_status "Installing dnstt-deploy script..."
         install_script
+        print_status "Starting dnstt server setup..."
     else
-        # Running from installed location - show menu
+        # Running from installed location - check for updates and show menu
+        check_for_updates
         handle_menu
+        # If we reach here, user chose option 1 (Install/Reconfigure), so continue
+        print_status "Starting dnstt server installation/reconfiguration..."
     fi
-
-    print_status "Starting dnstt server setup..."
 
     # Check and install required tools
     check_required_tools
