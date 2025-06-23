@@ -54,7 +54,6 @@
 1. **دانلود اسکریپت:**
    ```bash
    wget https://raw.githubusercontent.com/bugfloyd/dnstt-deploy/main/dnstt-deploy.sh
-   chmod +x dnstt-deploy.sh
    ```
 
 2. **اجرای راه‌اندازی:**

@@ -53,7 +53,6 @@ Go into your name registrar's configuration panel and add these records:
 1. **Download the script:**
    ```bash
    wget https://raw.githubusercontent.com/bugfloyd/dnstt-deploy/main/dnstt-deploy.sh
-   chmod +x dnstt-deploy.sh
    ```
 
 2. **Run the deployment:**
