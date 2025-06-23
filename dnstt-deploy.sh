@@ -29,6 +29,9 @@ DNSTT_USER="dnstt"
 CONFIG_FILE="${CONFIG_DIR}/dnstt-server.conf"
 SCRIPT_INSTALL_PATH="/usr/local/bin/dnstt-deploy"
 
+# Global variable to track if update is available
+UPDATE_AVAILABLE=false
+
 # Function to install/update the script itself
 install_script() {
     print_status "Installing/updating dnstt-deploy script..."
@@ -93,7 +96,10 @@ update_script() {
     cp "$temp_script" "$SCRIPT_INSTALL_PATH"
     rm "$temp_script"
     print_status "Script updated successfully!"
-    print_status "Changes will take effect on next run"
+    print_status "Restarting with new version..."
+
+    # Restart the script with the new version immediately
+    exec "$SCRIPT_INSTALL_PATH"
 }
 
 # Function to show main menu
@@ -101,6 +107,14 @@ show_menu() {
     echo ""
     print_status "dnstt Server Management"
     print_status "======================="
+
+    # Show update notification if available
+    if [ "$UPDATE_AVAILABLE" = true ]; then
+        echo -e "${YELLOW}[UPDATE AVAILABLE]${NC} A new version of this script is available!"
+        echo -e "${YELLOW}                  ${NC} Use option 2 to update to the latest version."
+        echo ""
+    fi
+
     echo "1) Install/Reconfigure dnstt server"
     echo "2) Update dnstt-deploy script"
     echo "3) Check service status"
@@ -154,30 +168,26 @@ handle_menu() {
     done
 }
 
-# Function to check for script updates
+# Function to check for script updates (notification only)
 check_for_updates() {
     # Only check for updates if we're running from the installed location
     if [ "$0" = "$SCRIPT_INSTALL_PATH" ]; then
         print_status "Checking for script updates..."
 
         local temp_script="/tmp/dnstt-deploy-latest.sh"
-        if curl -Ls "$SCRIPT_URL" -o "$temp_script"; then
+        if curl -Ls "$SCRIPT_URL" -o "$temp_script" 2>/dev/null; then
             local current_checksum
             local latest_checksum
             current_checksum=$(sha256sum "$SCRIPT_INSTALL_PATH" | cut -d' ' -f1)
             latest_checksum=$(sha256sum "$temp_script" | cut -d' ' -f1)
 
             if [ "$current_checksum" != "$latest_checksum" ]; then
-                print_status "New version available! Updating..."
-                chmod +x "$temp_script"
-                cp "$temp_script" "$SCRIPT_INSTALL_PATH"
-                rm "$temp_script"
-                print_status "Script updated successfully. Restarting with new version..."
-                exec "$SCRIPT_INSTALL_PATH" "$@"
+                UPDATE_AVAILABLE=true
+                print_warning "New version available! Use menu option 2 to update."
             else
                 print_status "Script is up to date"
-                rm "$temp_script"
             fi
+            rm "$temp_script"
         else
             print_warning "Could not check for updates (network issue)"
         fi
@@ -873,7 +883,7 @@ display_final_info() {
 
 # Main function
 main() {
-    # Check for updates if running from installed location (auto-update for curl installs)
+    # Check for updates if running from installed location (notification only)
     check_for_updates "$@"
 
     # Install/update the script itself if not running from installed location
