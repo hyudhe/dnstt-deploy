@@ -232,6 +232,81 @@ print_question() {
     echo -ne "${BLUE}[QUESTION]${NC} $1"
 }
 
+# Function to print success box without [INFO] prefix
+print_success_box() {
+    local border_color='\033[1;32m'  # Bright green
+    local text_color='\033[1;37m'    # Bright white text
+    local key_color='\033[1;33m'     # Yellow for key
+    local header_color='\033[1;36m'  # Cyan for headers
+    local reset='\033[0m'
+
+    echo ""
+    # Top border
+    echo -e "${border_color}+================================================================================${reset}"
+    echo -e "${border_color}|                          SETUP COMPLETED SUCCESSFULLY!                       |${reset}"
+    echo -e "${border_color}+================================================================================${reset}"
+    echo ""
+
+    # Configuration Details
+    echo -e "${header_color}Configuration Details:${reset}"
+    echo -e "  ${text_color}Nameserver subdomain: $NS_SUBDOMAIN${reset}"
+    echo -e "  ${text_color}MTU: $MTU_VALUE${reset}"
+    echo -e "  ${text_color}Tunnel mode: $TUNNEL_MODE${reset}"
+    echo -e "  ${text_color}Service user: $DNSTT_USER${reset}"
+    echo -e "  ${text_color}Listen port: $DNSTT_PORT (DNS traffic redirected from port 53)${reset}"
+    echo ""
+
+    # Public Key
+    echo -e "${header_color}Public Key Content:${reset}"
+    local pub_key_content
+    pub_key_content=$(cat "$PUBLIC_KEY_FILE")
+    echo -e "${key_color}$pub_key_content${reset}"
+    echo ""
+
+    # Script Location
+    echo -e "${text_color}Script installed at: $SCRIPT_INSTALL_PATH${reset}"
+    echo ""
+
+    # Management Commands
+    echo -e "${header_color}Management Commands:${reset}"
+    echo -e "  ${text_color}Run menu:           dnstt-deploy${reset}"
+    echo -e "  ${text_color}Start service:      systemctl start dnstt-server${reset}"
+    echo -e "  ${text_color}Stop service:       systemctl stop dnstt-server${reset}"
+    echo -e "  ${text_color}Service status:     systemctl status dnstt-server${reset}"
+    echo -e "  ${text_color}View logs:          journalctl -u dnstt-server -f${reset}"
+
+    # SOCKS info if applicable
+    if [ "$TUNNEL_MODE" = "socks" ]; then
+        echo ""
+        echo -e "${header_color}SOCKS Proxy Information:${reset}"
+        echo -e "${text_color}SOCKS proxy is running on 127.0.0.1:1080${reset}"
+        echo -e "${text_color}Dante service commands:${reset}"
+        echo -e "  ${text_color}Status:  systemctl status danted${reset}"
+        echo -e "  ${text_color}Stop:    systemctl stop danted${reset}"
+        echo -e "  ${text_color}Start:   systemctl start danted${reset}"
+        echo -e "  ${text_color}Logs:    journalctl -u danted -f${reset}"
+    fi
+
+    # Bottom border
+    echo ""
+    echo -e "${border_color}+================================================================================${reset}"
+    echo ""
+}
+
+# Function to print info lines without [INFO] prefix for final display
+print_info_line() {
+    local text_color='\033[1;37m'    # Bright white
+    local reset='\033[0m'
+    echo -e "${text_color}$1${reset}"
+}
+
+# Function to print section headers in final display
+print_section_header() {
+    local header_color='\033[1;36m'  # Bright cyan
+    local reset='\033[0m'
+    echo -e "${header_color}$1${reset}"
+}
+
 # Function to detect OS and package manager
 detect_os() {
     if [ -f /etc/os-release ]; then
@@ -793,39 +868,7 @@ start_services() {
 
 # Function to display final information
 display_final_info() {
-    print_status "=========================="
-    print_status "Setup completed successfully!"
-    print_status "=========================="
-    print_status "Configuration details:"
-    print_status "  Nameserver subdomain: $NS_SUBDOMAIN"
-    print_status "  MTU: $MTU_VALUE"
-    print_status "  Tunnel mode: $TUNNEL_MODE"
-    print_status "  Service user: $DNSTT_USER"
-    print_status "  Listen port: $DNSTT_PORT (DNS traffic redirected from port 53)"
-    print_status "  Private key location: $PRIVATE_KEY_FILE"
-    print_status "  Public key location: $PUBLIC_KEY_FILE"
-    print_status ""
-    print_status "Public key content:"
-    cat "$PUBLIC_KEY_FILE"
-    print_status ""
-    print_status "Script installed at: $SCRIPT_INSTALL_PATH"
-    print_status ""
-    print_status "Management commands:"
-    print_status "  Run menu:           dnstt-deploy"
-    print_status "  Start service:      systemctl start dnstt-server"
-    print_status "  Stop service:       systemctl stop dnstt-server"
-    print_status "  Service status:     systemctl status dnstt-server"
-    print_status "  View logs:          journalctl -u dnstt-server -f"
-
-    if [ "$TUNNEL_MODE" = "socks" ]; then
-        print_status ""
-        print_status "SOCKS proxy is running on 127.0.0.1:1080"
-        print_status "Dante service commands:"
-        print_status "  Status:  systemctl status danted"
-        print_status "  Stop:    systemctl stop danted"
-        print_status "  Start:   systemctl start danted"
-        print_status "  Logs:    journalctl -u danted -f"
-    fi
+    print_success_box
 }
 
 # Main function
