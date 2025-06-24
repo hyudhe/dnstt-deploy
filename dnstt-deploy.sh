@@ -440,7 +440,7 @@ detect_arch() {
 check_required_tools() {
     print_status "Checking required tools..."
 
-    local required_tools=("curl" "iptables" "ip6tables")
+    local required_tools=("curl")
     local missing_tools=()
 
     # Check which tools are missing
@@ -450,11 +450,43 @@ check_required_tools() {
         fi
     done
 
+    # Check for iptables separately since it might need special handling
+    if ! command -v "iptables" &> /dev/null; then
+        missing_tools+=("iptables")
+    fi
+
     if [ ${#missing_tools[@]} -gt 0 ]; then
         print_status "Installing missing tools: ${missing_tools[*]}"
         install_dependencies "${missing_tools[@]}"
     else
         print_status "All required tools are available"
+    fi
+
+    # Verify iptables installation after potential installation
+    verify_iptables_installation
+}
+
+# Function to verify iptables installation and capabilities
+verify_iptables_installation() {
+    print_status "Verifying iptables installation..."
+
+    if ! command -v iptables &> /dev/null; then
+        print_error "iptables is not available after installation attempt"
+        exit 1
+    fi
+
+    # Check if ip6tables is available (should be part of iptables package)
+    if command -v ip6tables &> /dev/null; then
+        print_status "Both iptables and ip6tables are available"
+    else
+        print_warning "ip6tables not found, IPv6 rules will be skipped"
+    fi
+
+    # Check if IPv6 is supported on the system
+    if [ -f /proc/net/if_inet6 ]; then
+        print_status "IPv6 support detected"
+    else
+        print_warning "IPv6 not supported on this system"
     fi
 }
 
@@ -463,15 +495,66 @@ install_dependencies() {
     local tools=("$@")
     print_status "Installing dependencies: ${tools[*]}"
 
+    # Safety check for PKG_MANAGER
+    if [[ -z "$PKG_MANAGER" ]]; then
+        print_error "Package manager not detected. Make sure detect_os() is called first."
+        exit 1
+    fi
+
     case $PKG_MANAGER in
         dnf|yum)
-            $PKG_MANAGER install -y "${tools[@]}" iptables-services
+            # For RHEL-based systems
+            local packages_to_install=()
+
+            for tool in "${tools[@]}"; do
+                case $tool in
+                    "iptables")
+                        packages_to_install+=("iptables" "iptables-services")
+                        ;;
+                    *)
+                        packages_to_install+=("$tool")
+                        ;;
+                esac
+            done
+
+            if ! $PKG_MANAGER install -y "${packages_to_install[@]}"; then
+                print_error "Failed to install packages: ${packages_to_install[*]}"
+                exit 1
+            fi
             ;;
         apt)
-            apt update
-            apt install -y "${tools[@]}" iptables-persistent
+            # For Debian-based systems
+            if ! apt update; then
+                print_error "Failed to update package lists"
+                exit 1
+            fi
+
+            local packages_to_install=()
+
+            for tool in "${tools[@]}"; do
+                case $tool in
+                    "iptables")
+                        # iptables package includes both iptables and ip6tables
+                        packages_to_install+=("iptables" "iptables-persistent")
+                        ;;
+                    *)
+                        packages_to_install+=("$tool")
+                        ;;
+                esac
+            done
+
+            if ! apt install -y "${packages_to_install[@]}"; then
+                print_error "Failed to install packages: ${packages_to_install[*]}"
+                exit 1
+            fi
+            ;;
+        *)
+            print_error "Unsupported package manager: $PKG_MANAGER"
+            exit 1
             ;;
     esac
+
+    print_status "Dependencies installed successfully"
 }
 
 # Function to get user input
@@ -693,34 +776,71 @@ generate_keys() {
 configure_iptables() {
     print_status "Configuring iptables rules for DNS redirection..."
 
+    # Verify iptables is available
+    if ! command -v iptables &> /dev/null; then
+        print_error "iptables command not found. Cannot configure firewall rules."
+        exit 1
+    fi
+
     # Get the primary network interface
     local interface
     interface=$(ip route | grep default | awk '{print $5}' | head -1)
     if [[ -z "$interface" ]]; then
-        interface="eth0"  # fallback
-        print_warning "Could not detect network interface, using eth0"
+        # Try alternative method to get interface
+        interface=$(ip link show | grep -E "^[0-9]+: (eth|ens|enp)" | head -1 | cut -d':' -f2 | awk '{print $1}')
+        if [[ -z "$interface" ]]; then
+            interface="eth0"  # fallback
+            print_warning "Could not detect network interface, using eth0 as fallback"
+        else
+            print_status "Detected network interface: $interface"
+        fi
+    else
+        print_status "Using network interface: $interface"
     fi
-    print_status "Using network interface: $interface"
 
     # IPv4 rules
     print_status "Setting up IPv4 iptables rules..."
-    iptables -I INPUT -p udp --dport "$DNSTT_PORT" -j ACCEPT
-    iptables -t nat -I PREROUTING -i "$interface" -p udp --dport 53 -j REDIRECT --to-ports "$DNSTT_PORT"
 
-    # IPv6 rules (if IPv6 is available)
+    if ! iptables -I INPUT -p udp --dport "$DNSTT_PORT" -j ACCEPT; then
+        print_error "Failed to add IPv4 INPUT rule"
+        exit 1
+    fi
+
+    if ! iptables -t nat -I PREROUTING -i "$interface" -p udp --dport 53 -j REDIRECT --to-ports "$DNSTT_PORT"; then
+        print_error "Failed to add IPv4 NAT rule"
+        exit 1
+    fi
+
+    print_status "IPv4 iptables rules configured successfully"
+
+    # IPv6 rules (if IPv6 and ip6tables are available)
     if command -v ip6tables &> /dev/null && [ -f /proc/net/if_inet6 ]; then
         print_status "Setting up IPv6 iptables rules..."
-        ip6tables -I INPUT -p udp --dport "$DNSTT_PORT" -j ACCEPT
-        ip6tables -t nat -I PREROUTING -i "$interface" -p udp --dport 53 -j REDIRECT --to-ports "$DNSTT_PORT"
+
+        if ip6tables -I INPUT -p udp --dport "$DNSTT_PORT" -j ACCEPT 2>/dev/null; then
+            print_status "IPv6 INPUT rule added successfully"
+        else
+            print_warning "Failed to add IPv6 INPUT rule (IPv6 might not be fully configured)"
+        fi
+
+        if ip6tables -t nat -I PREROUTING -i "$interface" -p udp --dport 53 -j REDIRECT --to-ports "$DNSTT_PORT" 2>/dev/null; then
+            print_status "IPv6 NAT rule added successfully"
+        else
+            print_warning "Failed to add IPv6 NAT rule (IPv6 NAT might not be supported)"
+        fi
     else
-        print_warning "IPv6 not available, skipping ip6tables rules"
+        if ! command -v ip6tables &> /dev/null; then
+            print_warning "ip6tables not available, skipping IPv6 rules"
+        elif [ ! -f /proc/net/if_inet6 ]; then
+            print_warning "IPv6 not enabled on system, skipping IPv6 rules"
+        fi
     fi
 
     # Save iptables rules based on distribution
     save_iptables_rules
 }
 
-# Function to save iptables rules
+# Function to save iptables rules with better error handling
 save_iptables_rules() {
     print_status "Saving iptables rules..."
 
@@ -730,16 +850,30 @@ save_iptables_rules() {
             if command -v iptables-save &> /dev/null; then
                 # Create directory if it doesn't exist
                 mkdir -p /etc/sysconfig
-                iptables-save > /etc/sysconfig/iptables
-                if command -v ip6tables-save &> /dev/null && [ -f /proc/net/if_inet6 ]; then
-                    ip6tables-save > /etc/sysconfig/ip6tables
+
+                if iptables-save > /etc/sysconfig/iptables; then
+                    print_status "IPv4 iptables rules saved to /etc/sysconfig/iptables"
+                else
+                    print_warning "Failed to save IPv4 iptables rules"
                 fi
 
-                # Enable and start iptables service
-                if systemctl list-unit-files | grep -q iptables.service; then
-                    systemctl enable iptables
-                    systemctl enable ip6tables
+                if command -v ip6tables-save &> /dev/null && [ -f /proc/net/if_inet6 ]; then
+                    if ip6tables-save > /etc/sysconfig/ip6tables; then
+                        print_status "IPv6 iptables rules saved to /etc/sysconfig/ip6tables"
+                    else
+                        print_warning "Failed to save IPv6 iptables rules"
+                    fi
                 fi
+
+                # Enable and start iptables service if available
+                if systemctl list-unit-files | grep -q iptables.service; then
+                    systemctl enable iptables 2>/dev/null || print_warning "Could not enable iptables service"
+                    if command -v ip6tables &> /dev/null && [ -f /proc/net/if_inet6 ]; then
+                        systemctl enable ip6tables 2>/dev/null || print_warning "Could not enable ip6tables service"
+                    fi
+                fi
+            else
+                print_warning "iptables-save not available, rules will not persist after reboot"
             fi
             ;;
         apt)
@@ -747,10 +881,27 @@ save_iptables_rules() {
             if command -v iptables-save &> /dev/null; then
                 # Create directory if it doesn't exist
                 mkdir -p /etc/iptables
-                iptables-save > /etc/iptables/rules.v4
-                if command -v ip6tables-save &> /dev/null && [ -f /proc/net/if_inet6 ]; then
-                    ip6tables-save > /etc/iptables/rules.v6
+
+                if iptables-save > /etc/iptables/rules.v4; then
+                    print_status "IPv4 iptables rules saved to /etc/iptables/rules.v4"
+                else
+                    print_warning "Failed to save IPv4 iptables rules"
                 fi
+
+                if command -v ip6tables-save &> /dev/null && [ -f /proc/net/if_inet6 ]; then
+                    if ip6tables-save > /etc/iptables/rules.v6; then
+                        print_status "IPv6 iptables rules saved to /etc/iptables/rules.v6"
+                    else
+                        print_warning "Failed to save IPv6 iptables rules"
+                    fi
+                fi
+
+                # Try to enable netfilter-persistent if available
+                if systemctl list-unit-files | grep -q netfilter-persistent.service; then
+                    systemctl enable netfilter-persistent 2>/dev/null || print_warning "Could not enable netfilter-persistent service"
+                fi
+            else
+                print_warning "iptables-save not available, rules will not persist after reboot"
             fi
             ;;
     esac
@@ -977,12 +1128,12 @@ main() {
         print_status "Starting dnstt server installation/reconfiguration..."
     fi
 
-    # Check and install required tools
-    check_required_tools
-
     # Detect OS and architecture
     detect_os
     detect_arch
+
+    # Check and install required tools
+    check_required_tools
 
     # Get user input
     get_user_input
