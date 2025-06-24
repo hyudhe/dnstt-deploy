@@ -440,9 +440,10 @@ detect_arch() {
 check_required_tools() {
     print_status "Checking required tools..."
 
-    local required_tools=("curl" "wget" "iptables" "ip6tables")
+    local required_tools=("curl" "iptables" "ip6tables")
     local missing_tools=()
 
+    # Check which tools are missing
     for tool in "${required_tools[@]}"; do
         if ! command -v "$tool" &> /dev/null; then
             missing_tools+=("$tool")
@@ -759,23 +760,35 @@ save_iptables_rules() {
 configure_firewall() {
     print_status "Configuring firewall..."
 
-    # Check if firewalld is active
-    if systemctl is-active --quiet firewalld; then
-        print_status "Configuring firewalld..."
+    # Check if firewalld is available and active
+    if command -v firewall-cmd &> /dev/null && systemctl is-active --quiet firewalld; then
+        print_status "Configuring active firewalld..."
         firewall-cmd --permanent --add-port="$DNSTT_PORT"/udp
         firewall-cmd --permanent --add-port=53/udp
         firewall-cmd --reload
         print_status "Firewalld configured successfully"
 
-    # Check if ufw is active
-    elif systemctl is-active --quiet ufw || ufw status | grep -q "Status: active"; then
-        print_status "Configuring ufw..."
+    # Check if ufw is available and active
+    elif command -v ufw &> /dev/null && ufw status | grep -q "Status: active"; then
+        print_status "Configuring active ufw..."
         ufw allow "$DNSTT_PORT"/udp
         ufw allow 53/udp
         print_status "UFW configured successfully"
 
     else
-        print_status "No active firewall service detected (firewalld/ufw)"
+        print_status "No active firewall service detected"
+        print_status "Available firewall tools:"
+
+        # List available but inactive firewall tools
+        if command -v firewall-cmd &> /dev/null; then
+            print_status "  - firewalld (inactive)"
+        fi
+        if command -v ufw &> /dev/null; then
+            print_status "  - ufw (inactive)"
+        fi
+
+        print_status "Relying on iptables rules only"
+        print_status "If you have a firewall active, manually allow ports $DNSTT_PORT/udp and 53/udp"
     fi
 
     # Configure iptables rules regardless of firewall service
